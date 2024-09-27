@@ -1,0 +1,2 @@
+Epoch: 95 | lr:0.0000100 | Loss: 0.1102 | topview Loss: 0.5211 | transform_topview Loss: 0.3597 | transform Loss: 0.9106
+Epoch: 95 | Validation: mIOU: 0.1941 mAP: 0.4387

@@ -1,0 +1,41 @@
+Epoch: 95 | lr:0.0001000 | Loss: 0.0588 | topview Loss: 0.2341 | transform_topview Loss: 0.2353 | transform Loss: 0.8821
+Epoch: 95 | Validation: mIOU: 28.55 % mAP: 29.47 %
+Epoch: 96 | lr:0.0001000 | Loss: 0.0390 | topview Loss: 0.1605 | transform_topview Loss: 0.1506 | transform Loss: 0.8821
+Epoch: 97 | lr:0.0001000 | Loss: 0.0315 | topview Loss: 0.1305 | transform_topview Loss: 0.1210 | transform Loss: 0.8821
+Epoch: 98 | lr:0.0001000 | Loss: 0.0252 | topview Loss: 0.1024 | transform_topview Loss: 0.0983 | transform Loss: 0.8821
+Epoch: 99 | lr:0.0001000 | Loss: 0.0211 | topview Loss: 0.0839 | transform_topview Loss: 0.0844 | transform Loss: 0.8821
+Epoch: 100 | lr:0.0001000 | Loss: 0.0180 | topview Loss: 0.0687 | transform_topview Loss: 0.0743 | transform Loss: 0.8821
+Epoch: 100 | Validation: mIOU: 29.73 % mAP: 31.56 %
+Epoch: 101 | lr:0.0001000 | Loss: 0.0159 | topview Loss: 0.0585 | transform_topview Loss: 0.0678 | transform Loss: 0.8821
+Epoch: 102 | lr:0.0001000 | Loss: 0.0149 | topview Loss: 0.0517 | transform_topview Loss: 0.0667 | transform Loss: 0.8821
+Epoch: 103 | lr:0.0001000 | Loss: 0.0128 | topview Loss: 0.0452 | transform_topview Loss: 0.0563 | transform Loss: 0.8821
+Epoch: 104 | lr:0.0001000 | Loss: 0.0119 | topview Loss: 0.0406 | transform_topview Loss: 0.0536 | transform Loss: 0.8821
+Epoch: 105 | lr:0.0001000 | Loss: 0.0113 | topview Loss: 0.0383 | transform_topview Loss: 0.0512 | transform Loss: 0.8821
+Epoch: 105 | Validation: mIOU: 36.13 % mAP: 40.19 %
+Epoch: 106 | lr:0.0001000 | Loss: 0.0105 | topview Loss: 0.0340 | transform_topview Loss: 0.0487 | transform Loss: 0.8821
+Epoch: 107 | lr:0.0001000 | Loss: 0.0102 | topview Loss: 0.0328 | transform_topview Loss: 0.0476 | transform Loss: 0.8821
+Epoch: 108 | lr:0.0001000 | Loss: 0.0102 | topview Loss: 0.0295 | transform_topview Loss: 0.0511 | transform Loss: 0.8821
+Epoch: 109 | lr:0.0001000 | Loss: 0.0094 | topview Loss: 0.0298 | transform_topview Loss: 0.0448 | transform Loss: 0.8821
+Epoch: 110 | lr:0.0001000 | Loss: 0.0094 | topview Loss: 0.0282 | transform_topview Loss: 0.0463 | transform Loss: 0.8821
+Epoch: 110 | Validation: mIOU: 34.26 % mAP: 37.89 %
+Epoch: 111 | lr:0.0001000 | Loss: 0.0095 | topview Loss: 0.0285 | transform_topview Loss: 0.0469 | transform Loss: 0.8821
+Epoch: 112 | lr:0.0001000 | Loss: 0.0103 | topview Loss: 0.0285 | transform_topview Loss: 0.0528 | transform Loss: 0.8821
+Epoch: 113 | lr:0.0001000 | Loss: 0.0085 | topview Loss: 0.0244 | transform_topview Loss: 0.0429 | transform Loss: 0.8821
+Epoch: 114 | lr:0.0001000 | Loss: 0.0075 | topview Loss: 0.0232 | transform_topview Loss: 0.0361 | transform Loss: 0.8821
+Epoch: 115 | lr:0.0001000 | Loss: 0.0074 | topview Loss: 0.0225 | transform_topview Loss: 0.0361 | transform Loss: 0.8821
+Epoch: 115 | Validation: mIOU: 40.81 % mAP: 48.73 %
+Epoch: 116 | lr:0.0001000 | Loss: 0.0082 | topview Loss: 0.0228 | transform_topview Loss: 0.0422 | transform Loss: 0.8821
+Epoch: 117 | lr:0.0001000 | Loss: 0.0081 | topview Loss: 0.0257 | transform_topview Loss: 0.0380 | transform Loss: 0.8821
+Epoch: 118 | lr:0.0001000 | Loss: 0.0073 | topview Loss: 0.0225 | transform_topview Loss: 0.0347 | transform Loss: 0.8821
+Epoch: 119 | lr:0.0001000 | Loss: 0.0084 | topview Loss: 0.0206 | transform_topview Loss: 0.0460 | transform Loss: 0.8821
+Epoch: 120 | lr:0.0001000 | Loss: 0.0085 | topview Loss: 0.0210 | transform_topview Loss: 0.0460 | transform Loss: 0.8821
+Epoch: 120 | Validation: mIOU: 35.71 % mAP: 41.88 %
+Epoch: 121 | lr:0.0001000 | Loss: 0.0079 | topview Loss: 0.0220 | transform_topview Loss: 0.0405 | transform Loss: 0.8821
+Epoch: 122 | lr:0.0001000 | Loss: 0.0070 | topview Loss: 0.0206 | transform_topview Loss: 0.0345 | transform Loss: 0.8821
+Epoch: 123 | lr:0.0001000 | Loss: 0.0069 | topview Loss: 0.0202 | transform_topview Loss: 0.0343 | transform Loss: 0.8821
+Epoch: 124 | lr:0.0001000 | Loss: 0.0071 | topview Loss: 0.0191 | transform_topview Loss: 0.0365 | transform Loss: 0.8821
+Epoch: 125 | lr:0.0001000 | Loss: 0.0076 | topview Loss: 0.0189 | transform_topview Loss: 0.0410 | transform Loss: 0.8821
+Epoch: 125 | Validation: mIOU: 37.73 % mAP: 46.71 %
+Epoch: 126 | lr:0.0001000 | Loss: 0.0072 | topview Loss: 0.0183 | transform_topview Loss: 0.0383 | transform Loss: 0.8821
+Epoch: 127 | lr:0.0001000 | Loss: 0.0079 | topview Loss: 0.0176 | transform_topview Loss: 0.0450 | transform Loss: 0.8821
+Epoch: 128 | lr:0.0001000 | Loss: 0.0067 | topview Loss: 0.0176 | transform_topview Loss: 0.0349 | transform Loss: 0.8821

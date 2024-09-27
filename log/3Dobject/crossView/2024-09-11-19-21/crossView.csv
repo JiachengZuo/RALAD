@@ -1,0 +1,9 @@
+Epoch: 95 | lr:0.0001000 | Loss: 0.0548 | topview Loss: 0.2156 | transform_topview Loss: 0.2217 | transform Loss: 0.8842
+Epoch: 95 | Validation: mIOU: 25.05 % mAP: 25.37 %
+Epoch: 96 | lr:0.0001000 | Loss: 0.0404 | topview Loss: 0.1583 | transform_topview Loss: 0.1639 | transform Loss: 0.8842
+Epoch: 97 | lr:0.0001000 | Loss: 0.0352 | topview Loss: 0.1379 | transform_topview Loss: 0.1426 | transform Loss: 0.8842
+Epoch: 98 | lr:0.0001000 | Loss: 0.0315 | topview Loss: 0.1224 | transform_topview Loss: 0.1288 | transform Loss: 0.8842
+Epoch: 99 | lr:0.0001000 | Loss: 0.0279 | topview Loss: 0.1066 | transform_topview Loss: 0.1161 | transform Loss: 0.8842
+Epoch: 100 | lr:0.0001000 | Loss: 0.0257 | topview Loss: 0.0947 | transform_topview Loss: 0.1100 | transform Loss: 0.8842
+Epoch: 100 | Validation: mIOU: 34.41 % mAP: 34.71 %
+Epoch: 101 | lr:0.0001000 | Loss: 0.0239 | topview Loss: 0.0848 | transform_topview Loss: 0.1056 | transform Loss: 0.8842
