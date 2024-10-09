@@ -5,7 +5,7 @@
 * [Abstract](#Abstract)
 * [Contributions](#Contributions)
 * [Getting-Started](#getting-started)
-* [Results](#results)
+* [Citation](#citation)
 * [License](#license)
 
 ## Abstract
@@ -42,9 +42,7 @@ The following table provides links to the [pre-trained models](https://drive.goo
 ## Results
 ![视频](./images/1.gif)
 ![视频](./images/2.gif)
-## Contact
-If you meet any problems, please describe them in issues or contact:
-* Weixiang Yang: [weixiang_yang@foxmail.com](weixiang_yang@foxmail.com)
+## Citation
 
 ## License
 This project is released under the MIT License (refer to the LICENSE file for details).This project partially depends on the sources of [Monolayout](https://github.com/hbutsuak95/monolayout)
