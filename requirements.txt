@@ -1,0 +1,10 @@
+#for RTX3090Ti : pip install torch==1.7.1+cu110 torchvision==0.8.2+cu110 -f https://download.pytorch.org/whl/torch_stable.html
+
+opencv_python==4.3.0.38
+easydict==1.9
+scipy==1.4.1
+numpy==1.18.5
+matplotlib==3.2.2
+tqdm==4.36.1
+Pillow==6.2.0
+tensorboardX==2.1
