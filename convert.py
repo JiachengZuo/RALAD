@@ -1,16 +1,15 @@
-import os
+from moviepy.editor import VideoFileClip
 
-# 假设有一个文件夹路径，我们将其命名为"image_folder"
-image_folder = "./fusion_dataset/new_carla/image_2"
+# MP4文件路径
+mp4_path = './images/视频2.mp4'
+# 输出GIF的路径
+gif_path = './images/2.gif'
 
-# 获取该文件夹下所有png文件的名称（去掉.png后缀）
-png_files = [file[:-4] for file in os.listdir(image_folder) if file.endswith('.png')]
+# 加载视频文件
+clip = VideoFileClip(mp4_path)
 
-# 将这些文件名保存到txt文件中
-output_file = "./output_file.txt"
-with open(output_file, 'w') as f:
-    for file_name in png_files:
-        f.write(file_name + '\n')
+# 将视频转换为GIF，这里可以设置fps参数来调整GIF的帧率
+clip.write_gif(gif_path, fps=30)
 
-# 返回生成的文件路径以供参考
-output_file
+# 释放资源
+clip.close()
