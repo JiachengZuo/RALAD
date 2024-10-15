@@ -852,7 +852,87 @@ class RALAD:
 
                 index += 1
                 print("Already create one epoch")
+        elif domain == 'out':
+            for carla_index, carla_name in enumerate(carla_img_list):
+                # get image
+                carla_img = self.get_img_OT(dir_path_img + '/carla/image_2', carla_name)
+                # get feature
+                carla_feature = self.calculate_feature(models, carla_img.cuda())
+                result_dot = torch.tensor(sys.maxsize).cuda()
+                path_index = 0
+                kitti_save_feature = None
+                # Visit Kitti Images
+                for kitti_index, kitti_name in enumerate(kitti_img_list):
+                    # get image
+                    kitti_img = self.get_img_OT(dir_path_img + '/carla_out/image_2', kitti_name)
+                    kitti_feature = self.calculate_feature(models, kitti_img.cuda())
+                    # Calculate distance
+                    result = self.calculate_dot_feature_cuda(carla_feature, kitti_feature, beta)
+                    if result < result_dot:
+                        result_dot = result
+                        path_index = kitti_index
+                        kitti_save_feature = kitti_feature
+                        print("Retrieve closer neighbors carla_out_img_index{%d}, the result is{%f}" % (path_index, result_dot))
+                
+                # Fusion features
+                print("Merge carla_out_index{%d}, carla_index{%d}"  % (path_index, carla_index))
+                if type == 'convex':
+                    merge_feature = carla_ratio * carla_feature + (1 - carla_ratio) * kitti_save_feature
+                else:
+                    merge_feature = carla_feature + kitti_save_feature
+                
+                kitti_gt_path = dir_path_img + '/carla_out/vehicle_256/' + kitti_img_list[path_index] +'.png'
+                carla_gt_path = dir_path_img + '/carla/vehicle_256/' + carla_name +'.png'
+                merge_gt = self.carla_kitti_label(carla_gt_path, kitti_gt_path)
+                # Save fusion features and label labels
+                data = (merge_feature.detach().to('cpu'), merge_gt.detach().to('cpu'))
+                save_pt_path = "./new_fine_tune/pt/" + type + "/train/"
+                self.ensure_directory_exists(save_pt_path)
+                torch.save(data, save_pt_path + self.write_text_to_file(index) + ".pt")
 
+                index += 1
+                print("Already create one epoch")
+        else:
+            for carla_index, carla_name in enumerate(carla_img_list):
+                # get image
+                carla_img = self.get_img_OT(dir_path_img + '/kitti/image_2', carla_name)
+                # get feature
+                carla_feature = self.calculate_feature(models, carla_img.cuda())
+                result_dot = torch.tensor(sys.maxsize).cuda()
+                path_index = 0
+                kitti_save_feature = None
+                # Visit Kitti Images
+                for kitti_index, kitti_name in enumerate(kitti_img_list):
+                    # get image
+                    kitti_img = self.get_img_OT(dir_path_img + '/kitti_out/image_2', kitti_name)
+                    kitti_feature = self.calculate_feature(models, kitti_img.cuda())
+                    # Calculate distance
+                    result = self.calculate_dot_feature_cuda(carla_feature, kitti_feature, beta)
+                    if result < result_dot:
+                        result_dot = result
+                        path_index = kitti_index
+                        kitti_save_feature = kitti_feature
+                        print("Retrieve closer neighbors carla_img_index{%d}, the result is{%f}" % (path_index, result_dot))
+                
+                # Fusion features
+                print("Merge kitti_out_index{%d}, kitti_index{%d}"  % (path_index, carla_index))
+                if type == 'convex':
+                    merge_feature = carla_ratio * carla_feature + (1 - carla_ratio) * kitti_save_feature
+                else:
+                    merge_feature = carla_feature + kitti_save_feature
+                
+                kitti_gt_path = dir_path_img + '/kitti_out/vehicle_256/' + kitti_img_list[path_index] +'.png'
+                carla_gt_path = dir_path_img + '/carla/vehicle_256/' + carla_name +'.png'
+                merge_gt = self.carla_kitti_label(carla_gt_path, kitti_gt_path)
+                # Save fusion features and label labels
+                data = (merge_feature.detach().to('cpu'), merge_gt.detach().to('cpu'))
+                save_pt_path = "./new_fine_tune/pt/" + type + "/train/"
+                self.ensure_directory_exists(save_pt_path)
+                torch.save(data, save_pt_path + self.write_text_to_file(index) + ".pt")
+
+                index += 1
+                print("Already create one epoch")
+                
     def Get_kitti_feature(self, models, index, kitti_dir_path_img, kitti_dir_path_gt, kitti_num):
 
         kitti_image_list, kitti_image_list_path, kitti_gt_list_path = self.get_dataset_kitti(kitti_dir_path_img,
