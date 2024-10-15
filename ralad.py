@@ -433,10 +433,10 @@ class RALAD:
         # create model
         models = self.create_model(args)
         # txt path
-        carla_txt_path = './splits/3Dobject/train_kitti.txt'
-        kitti_txt_path = './splits/3Dobject/train_kitti.txt'
-        carla_txt_path_x = './splits/3Dobject/train_kitti.txt'
-        kitti_txt_path_x = './splits/3Dobject/train_kitti.txt'
+        carla_txt_path = './splits/3Dobject/train_files_carla.txt'
+        kitti_txt_path = './splits/3Dobject/train_files_kitti.txt'
+        carla_txt_path_x = './splits/3Dobject/train_files_carla.txt'
+        kitti_txt_path_x = './splits/3Dobject/train_files_kitti.txt'
         # image path
         dir_path_img = './fusion_dataset'
 
@@ -444,6 +444,7 @@ class RALAD:
         path = "./new_fine_tune/pt/" + 'convex' + "/train/"
         self.ensure_directory_exists(path)
         num = self.count_files_in_directory(path)
+        index = 0
         index += num
         self.Retrieval_merge_neighbor(models, index,'convex', carla_ratio=0.4, 
                                       carla_txt_path=carla_txt_path, kitti_txt_path=kitti_txt_path, 
@@ -796,6 +797,7 @@ class RALAD:
     def Retrieval_merge_neighbor(self, models, index, type, carla_ratio, carla_txt_path, kitti_txt_path, dir_path_img, domain):
         carla_img_list = self.read_picture_names_from_file(carla_txt_path)
         kitti_img_list = self.read_picture_names_from_file(kitti_txt_path)
+        print("KITTI %d images and CARLA %d images" % (len(kitti_img_list ),len(carla_img_list)))
         beta = 1e-3
         index = index
 
