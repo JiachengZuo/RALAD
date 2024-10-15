@@ -120,392 +120,7 @@ def get_args():
     configs = edict(vars(parser.parse_args()))
     return configs
 
-def sinkhorn_distance(r, c, M, reg=1e-2, error_thres=1e-5, niter=100):
-    device = r.device
-
-    b, m, n = M.shape
-    assert r.shape[0] == c.shape[0] == b and r.shape[1] == m and c.shape[1] == n, "r.shape=%s, c=shape=%s, M.shape=%s" % (r.shape, c.shape, M.shape)
-
-    K = (-M / reg).exp()  # (b, m, n)
-    u = torch.ones_like(r) / m  # (b, m)
-    v = torch.ones_like(c) / n  # (b, n)
-
-    for _ in range(niter):
-        r0 = u
-        # 避免出现除以0的情况
-        u = r / (torch.einsum("bmn,bn->bm", [K, v]) + 1e-10)  # (b, m)
-        v = c / (torch.einsum("bmn,bm->bn", [K, u]) + 1e-10)  # (b, n)
-
-        err = (u - r0).abs().mean()
-        if err.item() < error_thres:
-            break
-
-    T = torch.einsum("bm,bn->bmn", [u, v]) * K
-    return T
-
-def calculate_dot_feature(feature_1, feature_2, beta):
-    b, c, _ , _= feature_1.shape
-    feature_1 = feature_1.float()
-    feature_2 = feature_2.float()
-    feature_1 = feature_1.flatten()
-    feature_2 = feature_2.flatten()
-    feature_1 = feature_1.reshape(b, c, -1)
-    feature_2 = feature_2.reshape(b, c, -1)
-
-    l = feature_1.shape[-1]
-    dist = (torch.arange(l).view(l, 1) - torch.arange(l).view(1, l)).abs().float()
-    D = dist / dist.max()
-    D = D.cpu().numpy()
-    _M = torch.from_numpy(D).float().unsqueeze(0)  # b, m, n
-    # 保存最好的id
-    result_save = []
-
-    for i in range(feature_1.shape[0]): # Feature_1 batch循环
-        result_dot = sys.maxsize
-        index = 0
-        for j in range(feature_2.shape[0]): # Feature_2 batch循环
-            result_tmp = 0
-            sinkhorn_sum = 0
-            l2_sum = 0
-            # 计算整张图的sinkhorn distance和l2 distance
-            for k in range(feature_1.shape[1]): # 通道循环
-                # 计算sinkhorn_distance
-                P = sinkhorn_distance(feature_1[i][k].unsqueeze(0), feature_2[j][k].unsqueeze(0), _M,reg=1e-2)
-                P = P.squeeze(0).detach().cpu().numpy()
-                T = P * D
-                sinkhorn_sum = np.sum(T)
-                # 计算l2距离的平方
-                squared_diff = (feature_1[i][k] - feature_2[j][k]) ** 2
-                l2_sum = torch.sum(squared_diff)
-
-                # 计算dot
-                result_tmp += torch.sum(l2_sum * sinkhorn_sum) + beta * sinkhorn_sum * torch.log(torch.tensor(sinkhorn_sum))
-            # 保存最优的结果
-            # 计算dot
-            if result_tmp < result_dot:
-                # 更新最好的结果，并保存index
-                result_dot = result_tmp
-                index = j
-
-        #合并结果
-        result_save.append(feature_1[i] + feature_2[index])
-
-    return result_save
-
-def calculate_dot(feature_1, feature_2, beta):
-    l = feature_1.shape[-1]
-    dist = (torch.arange(l).view(l, 1) - torch.arange(l).view(1, l)).abs().float()
-    D = dist / dist.max()
-    D = D.cpu().numpy()
-    _M = torch.from_numpy(D).float().unsqueeze(0)  # b, m, n
-
-    # 计算sinkhorn_distance
-    P = sinkhorn_distance(feature_1, feature_2, _M,reg=1e-2)
-    P = P.squeeze(0).detach().cpu().numpy()
-    T = P * D
-    sinkhorn_sum = np.sum(T)
-    # 计算l2距离的平方
-    squared_diff = (feature_1 - feature_2) ** 2
-    l2_sum = torch.sum(squared_diff)
-
-    # 计算dot
-    return torch.sum(l2_sum * sinkhorn_sum) + beta * sinkhorn_sum * torch.log(torch.tensor(sinkhorn_sum))
-
-def calculate_dot_feature_cuda(feature_1, feature_2, beta):
-    b, c, _, _ = feature_1.shape
-    feature_1 = feature_1.float().cuda()
-    feature_2 = feature_2.float().cuda()
-    feature_1 = feature_1.flatten()
-    feature_2 = feature_2.flatten()
-    feature_1 = feature_1.reshape(b, c, -1)
-    feature_2 = feature_2.reshape(b, c, -1)
-
-    l = feature_1.shape[-1]
-    dist = (torch.arange(l).view(l, 1) - torch.arange(l).view(1, l)).abs().float().cuda()
-    D = dist / dist.max()
-    D = D.cpu().numpy()
-    _M = torch.from_numpy(D).float().unsqueeze(0).cuda()  # b, m, n
-
-    result_dot = torch.tensor(sys.maxsize).cuda()
-    for i in range(feature_1.shape[0]):  # Feature_1 batch循环
-        for j in range(feature_2.shape[0]):  # Feature_2 batch循环
-            result_tmp = 0
-            sinkhorn_sum = 0
-            l2_sum = 0
-            # 计算整张图的sinkhorn distance和l2 distance
-            for k in range(feature_1.shape[1]):  # 通道循环
-                # 计算sinkhorn_distance
-                P = sinkhorn_distance(feature_1[i][k].unsqueeze(0), feature_2[j][k].unsqueeze(0), _M, reg=1e-2)
-                P = P.squeeze(0).detach().cpu().numpy()
-                # 使用最小最大归一化，将特征图的值缩放到0和1之间
-                min_val = P.min()  # 计算特征图的最小值
-                max_val = P.max()  # 计算特征图的最大值
-                P = (P - min_val) / (max_val - min_val)
-                T = P * D
-                sinkhorn_sum = np.sum(T)
-                # 计算l2距离的平方
-                squared_diff = (feature_1[i][k] - feature_2[j][k]) ** 2
-                l2_sum = torch.sum(squared_diff)
-                # 计算dot
-                result_tmp += torch.sum(torch.sqrt(l2_sum) * sinkhorn_sum) + beta * sinkhorn_sum * torch.log(torch.tensor(sinkhorn_sum))
-            # 保存最优的结果
-            # 计算dot
-            if result_tmp < result_dot:
-                # 更新最好的结果，并保存index
-                result_dot = result_tmp
-
-    return result_dot
-
-def get_dataset_kitti(dir_path_img, dir_path_gt, top):
-    # 遍历目录下的所有文件
-    index = 0
-    #设置获取上限
-    top_index = top
-    device = torch.device("cuda")
-
-    image_list = []
-    image_list_path = []
-    gt_list_path = []
-    for filename in os.listdir(dir_path_img):
-        input_image = pil.open(dir_path_img + filename).convert('RGB')
-        input_image = input_image.resize(
-            (1024, 1024), pil.LANCZOS)
-        input_image = transforms.ToTensor()(input_image).unsqueeze(0)
-        input_image = input_image.to(device)
-        image_list.append(input_image)
-        image_list_path.append(dir_path_img + filename)
-        index += 1
-        if index >= top_index:
-            break
-    index = 0
-
-    for filename in os.listdir(dir_path_gt):
-        gt_list_path.append(dir_path_gt + filename)
-        index += 1
-        if index >= top_index:
-            break
-
-    return image_list, image_list_path, gt_list_path
-
-def get_dataset(dir_path_img, dir_path_gt):
-    device = torch.device("cuda")
-    # 遍历目录下的所有文件
-    image_list = []
-    image_list_path = []
-    gt_list_path = []
-    for filename in os.listdir(dir_path_img):
-        input_image = pil.open(dir_path_img + filename).convert('RGB')
-        input_image = input_image.resize(
-            (1024, 1024), pil.LANCZOS)
-        input_image = transforms.ToTensor()(input_image).unsqueeze(0)
-        input_image = input_image.to(device)
-        image_list.append(input_image)
-        image_list_path.append(dir_path_img + filename)
-        
-    for filename in os.listdir(dir_path_gt):
-        gt_list_path.append(dir_path_gt + filename)
-    
-
-    return image_list, image_list_path, gt_list_path
-
-def get_img(path):
-    input_image = pil.open(path).convert('RGB')
-    input_image = transforms.ToTensor()(input_image)
-    input_image = input_image
-    return input_image
-
-def write_text_to_file(file_number):
-    # 格式化文件名为5位数字，前面补0
-    file_name = f"{file_number:06d}"
-    
-    return file_name
-
-def load_model(models, model_path):
-    """Load model(s) from disk
-    """
-    model_path = os.path.expanduser(model_path)
-
-    assert os.path.isdir(model_path), \
-        "Cannot find folder {}".format(model_path)
-    print("loading model from folder {}".format(model_path))
-
-    for key in models.keys():
-        print("Loading {} weights...".format(key))
-        path = os.path.join(model_path, "{}.pth".format(key))
-        model_dict = models[key].state_dict()
-        pretrained_dict = torch.load(path, map_location='cuda:0')
-        pretrained_dict = {
-            k: v for k,
-                     v in pretrained_dict.items() if k in model_dict}
-        model_dict.update(pretrained_dict)
-        models[key].load_state_dict(model_dict)
-    return models
-
-def create_model(args):
-    print("=================加载预训练权重中================")
-    opt = get_args()
-
-    # Loading Pretarined Model
-    models = {}
-    models["encoder"] = crossView.Encoder(18, opt.height, opt.width, True)
-    models["label_encoder"] = crossView.Encoder(18, opt.height, opt.width, True)
-    models['CycledViewProjection'] = crossView.CycledViewProjection(in_dim=8)
-    models["CrossViewTransformer"] = crossView.CrossViewTransformer(128)
-    
-    models["decoder"] = crossView.Decoder(
-        models["encoder"].resnet_encoder.num_ch_enc, opt.num_class)
-    models["transform_decoder"] = crossView.Decoder(
-        models["encoder"].resnet_encoder.num_ch_enc, opt.num_class, "transform_decoder")
-
-    for key in models.keys():
-        models[key].to("cuda")
-
-    models = load_model(models, './ckpts')
-    return models
-
-def calculate_feature(models, feature):
-    features = models["encoder"](feature)
-    # transform_feature, retransform_features = models["CycledViewProjection"](features)
-
-    # result = models["CrossViewTransformer"](features, transform_feature, retransform_features)
-
-    return features
-
-def create_feature(models, feature_1, feature_2):
-    device = torch.device("cuda")
-    # 移植到device
-    feature_1 = feature_1.to(device)
-    feature_2 = feature_2.to(device)
-
-    # 计算特征向量
-    feature_1 = calculate_feature(models, feature_1)
-    feature_2 = calculate_feature(models, feature_2)
-
-    return feature_1, feature_2
-
-def convert_gt(path):
-    Origin_Point_Value = np.array([0, 255])
-    Out_Point_Value = np.array([0, 1])
-    png  = Image.open(path)
-
-    w, h    = png.size
-    png     = np.array(png)
-    out_png = np.zeros([h, w])
-    for i in range(len(Origin_Point_Value)):
-        mask = png[:, :] == Origin_Point_Value[i]
-        if len(np.shape(mask)) > 2:
-            mask = mask.all(-1)
-        out_png[mask] = Out_Point_Value[i]
-    
-    return torch.from_numpy(out_png).cuda()
-
-def carla_kitti_label(carla_path, kitti_path):
-    carla = convert_gt(carla_path)
-    kitti = convert_gt(kitti_path)
-    is_binary_carla = torch.all(torch.eq(carla, 0) | torch.eq(carla, 1))
-    is_binary_kitti = torch.all(torch.eq(kitti, 0) | torch.eq(kitti, 1))
-
-    print(f"Carla Matrix contains only 0s and 1s: {is_binary_carla.item()}")
-    print(f"Kitti Matrix contains only 0s and 1s: {is_binary_kitti.item()}")
-
-    result_matrix = torch.where(carla != kitti, carla + kitti, carla)
-    is_binary_kitti = torch.all(torch.eq(result_matrix, 0) | torch.eq(result_matrix, 1))
-    print(f"Result Matrix contains only 0s and 1s: {is_binary_kitti.item()}")
-    return result_matrix
-
-def Retrieval_merge_neighbor(models, index, type, carla_dir_path_img, carla_dir_path_gt, kitti_dir_path_img, kitti_dir_path_gt, carla_ratio, carla_num, kitti_num):
-    carla_dir_path_img = carla_dir_path_img
-    carla_dir_path_gt = carla_dir_path_gt
-    kitti_dir_path_img = kitti_dir_path_img
-    kitti_dir_path_gt = kitti_dir_path_gt
-    carla_image_list, carla_image_list_path, carla_gt_list_path = get_dataset_kitti(carla_dir_path_img,
-            carla_dir_path_gt, carla_num)
-    print("读取carla数据集完毕")
-    kitti_image_list, kitti_image_list_path, kitti_gt_list_path = get_dataset_kitti(kitti_dir_path_img,
-            kitti_dir_path_gt, kitti_num)
-    print("读取kitti数据集完毕")
-
-    beta = 1e-3
-
-    # 可视化融合的特征和label
-    save_img_path = './new_fine_turn/img/'
-    save_img_rgb_path = './new_fine_turn/feat/'
-    save_gt_path = './new_fine_turn/gt/'
-    index = index
-
-
-    print("检索并合并")    
-    # 访问carla图片
-    for carla_index, carla_img in enumerate(carla_image_list):
-        carla_feature = calculate_feature(models, carla_img.cuda())
-        result_dot = torch.tensor(sys.maxsize).cuda()
-        path_index = 0
-        kitti_save_feature = None
-        # 访问kitti图片
-        for kitti_index, kitti_img in enumerate(kitti_image_list):
-            kitti_feature = calculate_feature(models, kitti_img.cuda())
-            # 计算距离
-            result = calculate_dot_feature_cuda(carla_feature, kitti_feature, beta)
-            # print(result, result_dot)
-            if result < result_dot:
-                result_dot = result
-                path_index = kitti_index
-                kitti_save_feature = kitti_feature
-                print("检索到更近的邻居carla_img_index{%d},结果为{%f}" % (path_index, result_dot))
-        
-        # 融合特征
-        print("融合kitti_index{%d}, carla_index{%d}"  % (path_index, carla_index))
-        if type == 'convex':
-            merge_feature = carla_ratio * carla_feature + (1 - carla_ratio) * kitti_save_feature
-        else:
-            merge_feature = carla_feature + kitti_save_feature
-        merge_gt = carla_kitti_label(carla_gt_list_path[carla_index],kitti_gt_list_path[path_index])
-        # 保存融合特征和label标签
-        data = (merge_feature.detach().to('cpu'), merge_gt.detach().to('cpu'))
-        torch.save(data, "./new_fine_turn/pt/" + type + "/train/" + write_text_to_file(index) + ".pt")
-        torch.save(data, "./new_fine_turn/pt/" + type + "/val/" + write_text_to_file(index) + ".pt")
-
-
-        # #保存融合的图片信息，方便检查是否正确
-        # with open("./new_fine_turn/all.txt", 'a') as file:
-        #     file.write(str(carla_image_list_path[carla_index]) + "=====")
-        #     file.write(str(kitti_image_list_path[path_index]) + "\n")
-        #     file.write(str(carla_gt_list_path[carla_index]) + "=====")
-        #     file.write(str(kitti_gt_list_path[path_index]) + "\n")
-        # to_pil = ToPILImage()
-        # image_feature = to_pil((carla_img + kitti_image_list[path_index]).squeeze(0))
-        # merge_gt = to_pil((get_img(kitti_gt_list_path[path_index]) + get_img(carla_gt_list_path[carla_index])))
-
-        # # 将PIL图像保存为PNG文件
-        # image_feature.save(save_img_path + write_text_to_file(index)+ '.png')
-        # to_pil(carla_img.squeeze(0)).save(save_img_rgb_path + write_text_to_file(index)+ '.png')
-        # to_pil(kitti_image_list[path_index].squeeze(0)).save(save_img_rgb_path + write_text_to_file(index)+ '_kitii.png')
-        # merge_gt.save(save_gt_path + write_text_to_file(index) + '.png')
-        # with open("./new_fine_turn/data_train.txt", 'a') as file:
-        #     file.write(write_text_to_file(index) + "\n")
-        index += 1
-        print("Already create one epoch")
-
-def Get_kitti_feature(models, index, kitti_dir_path_img, kitti_dir_path_gt, kitti_num):
-
-    kitti_image_list, kitti_image_list_path, kitti_gt_list_path = get_dataset_kitti(kitti_dir_path_img,
-            kitti_dir_path_gt, kitti_num)
-
-    for kitti_index, kitti_img in enumerate(kitti_image_list):
-        kitti_feature = calculate_feature(models, kitti_img.cuda())
-        data_real = (kitti_feature.detach().to('cpu'), convert_gt(kitti_gt_list_path[kitti_index]).detach().to('cpu'))
-        torch.save(data_real, "./new_fine_turn/pt/convex/train/" + write_text_to_file(index) + ".pt")
-        index += 1
-
-def readlines(filename):
-    """Read all the lines in a text file and return as a list
-    """
-    with open(filename, 'r') as f:
-        lines = f.read().splitlines()
-    return lines
-
-# 步骤2: 创建Dataset子类
-class MyDataset(Dataset):
+class RALDataset(Dataset):
     def __init__(self, data_list):
         self.data_list = data_list
 
@@ -513,9 +128,9 @@ class MyDataset(Dataset):
         return len(self.data_list)
 
     def __getitem__(self, idx):
-        # 假设每个.pt文件保存的是一个元组(feature_map, ground_truth)
         feature_map, ground_truth = self.data_list[idx]
         return feature_map, ground_truth
+
 
 class Trainer:
     def __init__(self):
@@ -620,8 +235,8 @@ class Trainer:
                 data = torch.load(os.path.join(val_filenames, pt_file))
                 val_data_list.append(data)
 
-        train_dataset = MyDataset(train_data_list)
-        val_dataset = MyDataset(val_data_list)
+        train_dataset = RALDataset(train_data_list)
+        val_dataset = RALDataset(val_data_list)
 
         self.train_dataloader = DataLoader(train_dataset,
             self.opt.batch_size,
@@ -834,28 +449,437 @@ class Trainer:
         torch.manual_seed(seed)
         torch.cuda.manual_seed(seed)
         torch.cuda.manual_seed_all(seed)
+
+class RALAD:
+    def run(self):
+        args = get_args()
+        # load weight
+        # create model
+        models = self.create_model(args)
+        # txt path
+        carla_txt_path = './splits/3Dobject/train_files_carla.txt'
+        kitti_txt_path = './splits/3Dobject/train_files_kitti.txt'
+        carla_txt_path_x = './splits/3Dobject/train_files_carla.txt'
+        kitti_txt_path_x = './splits/3Dobject/train_files_kitti.txt'
+        # image path
+        dir_path_img = './fusion_dataset'
+
+        # in-domain and out-domain
+        path = "./new_fine_tune/pt/" + 'convex' + "/train/"
+        self.ensure_directory_exists(path)
+        num = self.count_files_in_directory(path)
+        index = 0
+        index += num
+        self.Retrieval_merge_neighbor(models, index,'convex', carla_ratio=0.4, 
+                                      carla_txt_path=carla_txt_path, kitti_txt_path=kitti_txt_path, 
+                                      dir_path_img=dir_path_img, domain='cross')
+        num = self.count_files_in_directory(path)
+        index += num
+        # out-domain
+        self.Retrieval_merge_neighbor(models, index,'convex', carla_ratio=0.4, 
+                                      carla_txt_path=carla_txt_path, kitti_txt_path=carla_txt_path_x, 
+                                      dir_path_img=dir_path_img, domain='out')
+        num = self.count_files_in_directory(path)
+        index += num
+        # in-domain
+        self.Retrieval_merge_neighbor(models, index,'convex',carla_ratio=0.4, 
+                                      carla_txt_path=kitti_txt_path, kitti_txt_path=kitti_txt_path_x, 
+                                      dir_path_img=dir_path_img, domain='in')
+    # To get the number of files in the directory, we can use the os.listdir method and count the files.
+    def count_files_in_directory(self, directory_path):
+        try:
+            # List all files and directories in the given path
+            files_and_dirs = os.listdir(directory_path)
+            # Filter out directories and count files
+            file_count = sum(1 for item in files_and_dirs if os.path.isfile(os.path.join(directory_path, item)))
+            return file_count
+        except Exception as e:
+            return f"Error: {e}"
+        
+    def sinkhorn_distance(self, r, c, M, reg=1e-2, error_thres=1e-5, niter=100):
+        device = r.device
+
+        b, m, n = M.shape
+        assert r.shape[0] == c.shape[0] == b and r.shape[1] == m and c.shape[1] == n, "r.shape=%s, c=shape=%s, M.shape=%s" % (r.shape, c.shape, M.shape)
+
+        K = (-M / reg).exp()  # (b, m, n)
+        u = torch.ones_like(r) / m  # (b, m)
+        v = torch.ones_like(c) / n  # (b, n)
+
+        for _ in range(niter):
+            r0 = u
+            # 避免出现除以0的情况
+            u = r / (torch.einsum("bmn,bn->bm", [K, v]) + 1e-10)  # (b, m)
+            v = c / (torch.einsum("bmn,bm->bn", [K, u]) + 1e-10)  # (b, n)
+
+            err = (u - r0).abs().mean()
+            if err.item() < error_thres:
+                break
+
+        T = torch.einsum("bm,bn->bmn", [u, v]) * K
+        return T
+
+    def calculate_dot_feature(self, feature_1, feature_2, beta):
+        b, c, _ , _= feature_1.shape
+        feature_1 = feature_1.float()
+        feature_2 = feature_2.float()
+        feature_1 = feature_1.flatten()
+        feature_2 = feature_2.flatten()
+        feature_1 = feature_1.reshape(b, c, -1)
+        feature_2 = feature_2.reshape(b, c, -1)
+
+        l = feature_1.shape[-1]
+        dist = (torch.arange(l).view(l, 1) - torch.arange(l).view(1, l)).abs().float()
+        D = dist / dist.max()
+        D = D.cpu().numpy()
+        _M = torch.from_numpy(D).float().unsqueeze(0)  # b, m, n
+        # 保存最好的id
+        result_save = []
+
+        for i in range(feature_1.shape[0]): # Feature_1 batch循环
+            result_dot = sys.maxsize
+            index = 0
+            for j in range(feature_2.shape[0]): # Feature_2 batch循环
+                result_tmp = 0
+                sinkhorn_sum = 0
+                l2_sum = 0
+                # 计算整张图的sinkhorn distance和l2 distance
+                for k in range(feature_1.shape[1]): # 通道循环
+                    # 计算sinkhorn_distance
+                    P = self.sinkhorn_distance(feature_1[i][k].unsqueeze(0), feature_2[j][k].unsqueeze(0), _M,reg=1e-2)
+                    P = P.squeeze(0).detach().cpu().numpy()
+                    T = P * D
+                    sinkhorn_sum = np.sum(T)
+                    # 计算l2距离的平方
+                    squared_diff = (feature_1[i][k] - feature_2[j][k]) ** 2
+                    l2_sum = torch.sum(squared_diff)
+
+                    # 计算dot
+                    result_tmp += torch.sum(l2_sum * sinkhorn_sum) + beta * sinkhorn_sum * torch.log(torch.tensor(sinkhorn_sum))
+                # 保存最优的结果
+                # 计算dot
+                if result_tmp < result_dot:
+                    # 更新最好的结果，并保存index
+                    result_dot = result_tmp
+                    index = j
+
+            #合并结果
+            result_save.append(feature_1[i] + feature_2[index])
+
+        return result_save
+
+    def calculate_dot(self, feature_1, feature_2, beta):
+        l = feature_1.shape[-1]
+        dist = (torch.arange(l).view(l, 1) - torch.arange(l).view(1, l)).abs().float()
+        D = dist / dist.max()
+        D = D.cpu().numpy()
+        _M = torch.from_numpy(D).float().unsqueeze(0)  # b, m, n
+
+        # 计算sinkhorn_distance
+        P = self.sinkhorn_distance(feature_1, feature_2, _M,reg=1e-2)
+        P = P.squeeze(0).detach().cpu().numpy()
+        T = P * D
+        sinkhorn_sum = np.sum(T)
+        # 计算l2距离的平方
+        squared_diff = (feature_1 - feature_2) ** 2
+        l2_sum = torch.sum(squared_diff)
+
+        # 计算dot
+        return torch.sum(l2_sum * sinkhorn_sum) + beta * sinkhorn_sum * torch.log(torch.tensor(sinkhorn_sum))
+
+    def calculate_dot_feature_cuda(self, feature_1, feature_2, beta):
+            b, c, _, _ = feature_1.shape
+            feature_1 = feature_1.float().cuda()
+            feature_2 = feature_2.float().cuda()
+            feature_1 = feature_1.flatten()
+            feature_2 = feature_2.flatten()
+            feature_1 = feature_1.reshape(b, c, -1)
+            feature_2 = feature_2.reshape(b, c, -1)
+
+            l = feature_1.shape[-1]
+            dist = (torch.arange(l).view(l, 1) - torch.arange(l).view(1, l)).abs().float().cuda()
+            D = dist / dist.max()
+            D = D.cpu().numpy()
+            _M = torch.from_numpy(D).float().unsqueeze(0).cuda()  # b, m, n
+
+            result_dot = torch.tensor(sys.maxsize).cuda()
+            for i in range(feature_1.shape[0]):  # Feature_1 batch循环
+                for j in range(feature_2.shape[0]):  # Feature_2 batch循环
+                    result_tmp = 0
+                    sinkhorn_sum = 0
+                    l2_sum = 0
+                    # 计算整张图的sinkhorn distance和l2 distance
+                    for k in range(feature_1.shape[1]):  # 通道循环
+                        # 计算sinkhorn_distance
+                        P = self.sinkhorn_distance(feature_1[i][k].unsqueeze(0), feature_2[j][k].unsqueeze(0), _M, reg=1e-2)
+                        P = P.squeeze(0).detach().cpu().numpy()
+                        # 使用最小最大归一化，将特征图的值缩放到0和1之间
+                        min_val = P.min()  # 计算特征图的最小值
+                        max_val = P.max()  # 计算特征图的最大值
+                        P = (P - min_val) / (max_val - min_val)
+                        T = P * D
+                        sinkhorn_sum = np.sum(T)
+                        # 计算l2距离的平方
+                        squared_diff = (feature_1[i][k] - feature_2[j][k]) ** 2
+                        l2_sum = torch.sum(squared_diff)
+                        # 计算dot
+                        result_tmp += torch.sum(torch.sqrt(l2_sum) * sinkhorn_sum) + beta * sinkhorn_sum * torch.log(torch.tensor(sinkhorn_sum))
+                    # 保存最优的结果
+                    # 计算dot
+                    if result_tmp < result_dot:
+                        # 更新最好的结果，并保存index
+                        result_dot = result_tmp
+
+            return result_dot
+
+    def get_dataset_kitti(self, dir_path_img, dir_path_gt, top):
+            # 遍历目录下的所有文件
+            index = 0
+            #设置获取上限
+            top_index = top
+            device = torch.device("cuda")
+
+            image_list = []
+            image_list_path = []
+            gt_list_path = []
+            for filename in os.listdir(dir_path_img):
+                input_image = pil.open(dir_path_img + filename).convert('RGB')
+                input_image = input_image.resize(
+                    (1024, 1024), pil.LANCZOS)
+                input_image = transforms.ToTensor()(input_image).unsqueeze(0)
+                input_image = input_image.to(device)
+                image_list.append(input_image)
+                image_list_path.append(dir_path_img + filename)
+                index += 1
+                if index >= top_index:
+                    break
+            index = 0
+
+            for filename in os.listdir(dir_path_gt):
+                gt_list_path.append(dir_path_gt + filename)
+                index += 1
+                if index >= top_index:
+                    break
+
+            return image_list, image_list_path, gt_list_path
+
+    def get_dataset(self, dir_path_img, dir_path_gt):
+        device = torch.device("cuda")
+        # 遍历目录下的所有文件
+        image_list = []
+        image_list_path = []
+        gt_list_path = []
+        for filename in os.listdir(dir_path_img):
+            input_image = pil.open(dir_path_img + filename).convert('RGB')
+            input_image = input_image.resize(
+                (1024, 1024), pil.LANCZOS)
+            input_image = transforms.ToTensor()(input_image).unsqueeze(0)
+            input_image = input_image.to(device)
+            image_list.append(input_image)
+            image_list_path.append(dir_path_img + filename)
+            
+        for filename in os.listdir(dir_path_gt):
+            gt_list_path.append(dir_path_gt + filename)
+        
+
+        return image_list, image_list_path, gt_list_path
+
+    def get_img(self, path):
+        input_image = pil.open(path).convert('RGB')
+        input_image = transforms.ToTensor()(input_image)
+        input_image = input_image
+        return input_image
+
+    def write_text_to_file(self, file_number):
+
+        file_name = f"{file_number:06d}"
+        
+        return file_name
+    def load_model(self, models, model_path):
+        """Load model(s) from disk
+        """
+        model_path = os.path.expanduser(model_path)
+
+        assert os.path.isdir(model_path), \
+            "Cannot find folder {}".format(model_path)
+        print("loading model from folder {}".format(model_path))
+
+        for key in models.keys():
+            print("Loading {} weights...".format(key))
+            path = os.path.join(model_path, "{}.pth".format(key))
+            model_dict = models[key].state_dict()
+            pretrained_dict = torch.load(path, map_location='cuda:0')
+            pretrained_dict = {
+                k: v for k,
+                        v in pretrained_dict.items() if k in model_dict}
+            model_dict.update(pretrained_dict)
+            models[key].load_state_dict(model_dict)
+        return models
+
+    def create_model(self, args):
+        print("=================load model================")
+        opt = get_args()
+
+        # Loading Pretarined Model
+        models = {}
+        models["encoder"] = crossView.Encoder(18, opt.height, opt.width, True)
+        models["label_encoder"] = crossView.Encoder(18, opt.height, opt.width, True)
+        models['CycledViewProjection'] = crossView.CycledViewProjection(in_dim=8)
+        models["CrossViewTransformer"] = crossView.CrossViewTransformer(128)
+        
+        models["decoder"] = crossView.Decoder(
+            models["encoder"].resnet_encoder.num_ch_enc, opt.num_class)
+        models["transform_decoder"] = crossView.Decoder(
+            models["encoder"].resnet_encoder.num_ch_enc, opt.num_class, "transform_decoder")
+
+        for key in models.keys():
+            models[key].to("cuda")
+
+        models = self.load_model(models, './ckpts')
+        return models
+
+    def calculate_feature(self, models, feature):
+        features = models["encoder"](feature)
+        # transform_feature, retransform_features = models["CycledViewProjection"](features)
+
+        # result = models["CrossViewTransformer"](features, transform_feature, retransform_features)
+
+        return features
+
+    def create_feature(self, models, feature_1, feature_2):
+        device = torch.device("cuda")
+        # 移植到device
+        feature_1 = feature_1.to(device)
+        feature_2 = feature_2.to(device)
+
+        # 计算特征向量
+        feature_1 = self.calculate_feature(models, feature_1)
+        feature_2 = self.calculate_feature(models, feature_2)
+
+        return feature_1, feature_2
+
+    def convert_gt(self, path):
+        Origin_Point_Value = np.array([0, 255])
+        Out_Point_Value = np.array([0, 1])
+        png  = Image.open(path)
+
+        w, h    = png.size
+        png     = np.array(png)
+        out_png = np.zeros([h, w])
+        for i in range(len(Origin_Point_Value)):
+            mask = png[:, :] == Origin_Point_Value[i]
+            if len(np.shape(mask)) > 2:
+                mask = mask.all(-1)
+            out_png[mask] = Out_Point_Value[i]
+        
+        return torch.from_numpy(out_png).cuda()
+
+    def carla_kitti_label(self, carla_path, kitti_path):
+        carla = self.convert_gt(carla_path)
+        kitti = self.convert_gt(kitti_path)
+        is_binary_carla = torch.all(torch.eq(carla, 0) | torch.eq(carla, 1))
+        is_binary_kitti = torch.all(torch.eq(kitti, 0) | torch.eq(kitti, 1))
+
+        print(f"Carla Matrix contains only 0s and 1s: {is_binary_carla.item()}")
+        print(f"Kitti Matrix contains only 0s and 1s: {is_binary_kitti.item()}")
+
+        result_matrix = torch.where(carla != kitti, carla + kitti, carla)
+        is_binary_kitti = torch.all(torch.eq(result_matrix, 0) | torch.eq(result_matrix, 1))
+        print(f"Result Matrix contains only 0s and 1s: {is_binary_kitti.item()}")
+        return result_matrix
+
+    def get_img_OT(self, dir_path_img, carla_name):
+        carla_img = pil.open(dir_path_img + '/' + carla_name + '.png').convert('RGB')
+        carla_img = carla_img.resize(
+            (1024, 1024), pil.LANCZOS)
+        carla_img = transforms.ToTensor()(carla_img).unsqueeze(0)
+        carla_img = carla_img.to('cuda')
+        return carla_img
+
+    def ensure_directory_exists(self, directory_path):
+        if not os.path.exists(directory_path):
+            os.makedirs(directory_path)
+            return f"Directory created: {directory_path}"
+        else:
+            return f"Directory already exists: {directory_path}"
+        
+    def Retrieval_merge_neighbor(self, models, index, type, carla_ratio, carla_txt_path, kitti_txt_path, dir_path_img, domain):
+        carla_img_list = self.read_picture_names_from_file(carla_txt_path)
+        kitti_img_list = self.read_picture_names_from_file(kitti_txt_path)
+        print("KITTI %d images and CARLA %d images" % (len(kitti_img_list ),len(carla_img_list)))
+        beta = 1e-3
+        index = index
+
+        print("Retrieve and merge")    
+        # Visit Carla Images
+        if domain == 'cross':
+            for carla_index, carla_name in enumerate(carla_img_list):
+            # get image
+                carla_img = self.get_img_OT(dir_path_img + '/carla/image_2', carla_name)
+                # get feature
+                carla_feature = self.calculate_feature(models, carla_img.cuda())
+                result_dot = torch.tensor(sys.maxsize).cuda()
+                path_index = 0
+                kitti_save_feature = None
+                # Visit Kitti Images
+                for kitti_index, kitti_name in enumerate(kitti_img_list):
+                    # get image
+                    kitti_img = self.get_img_OT(dir_path_img + '/kitti/image_2', kitti_name)
+                    kitti_feature = self.calculate_feature(models, kitti_img.cuda())
+                    # Calculate distance
+                    result = self.calculate_dot_feature_cuda(carla_feature, kitti_feature, beta)
+                    if result < result_dot:
+                        result_dot = result
+                        path_index = kitti_index
+                        kitti_save_feature = kitti_feature
+                        print("Retrieve closer neighbors carla_img_index{%d}, the result is{%f}" % (path_index, result_dot))
+                
+                # Fusion features
+                print("Merge kitti_index{%d}, carla_index{%d}"  % (path_index, carla_index))
+                if type == 'convex':
+                    merge_feature = carla_ratio * carla_feature + (1 - carla_ratio) * kitti_save_feature
+                else:
+                    merge_feature = carla_feature + kitti_save_feature
+                
+                kitti_gt_path = dir_path_img + '/kitti/vehicle_256/' + kitti_img_list[path_index] +'.png'
+                carla_gt_path = dir_path_img + '/carla/vehicle_256/' + carla_name +'.png'
+                merge_gt = self.carla_kitti_label(carla_gt_path, kitti_gt_path)
+                # Save fusion features and label labels
+                data = (merge_feature.detach().to('cpu'), merge_gt.detach().to('cpu'))
+                save_pt_path = "./new_fine_tune/pt/" + type + "/train/"
+                self.ensure_directory_exists(save_pt_path)
+                torch.save(data, save_pt_path + self.write_text_to_file(index) + ".pt")
+
+                index += 1
+                print("Already create one epoch")
+
+    def Get_kitti_feature(self, models, index, kitti_dir_path_img, kitti_dir_path_gt, kitti_num):
+
+        kitti_image_list, kitti_image_list_path, kitti_gt_list_path = self.get_dataset_kitti(kitti_dir_path_img,
+                kitti_dir_path_gt, kitti_num)
+
+        for kitti_index, kitti_img in enumerate(kitti_image_list):
+            kitti_feature = self.alculate_feature(models, kitti_img.cuda())
+            data_real = (kitti_feature.detach().to('cpu'), self.convert_gt(kitti_gt_list_path[kitti_index]).detach().to('cpu'))
+            torch.save(data_real, "./new_fine_turn/pt/convex/train/" + self.write_text_to_file(index) + ".pt")
+            index += 1
+
+    def readlines(filename):
+        """Read all the lines in a text file and return as a list
+        """
+        with open(filename, 'r') as f:
+            lines = f.read().splitlines()
+        return lines
+    def read_picture_names_from_file(self, file_path):
+        with open(file_path, 'r') as file:
+            # Read all lines and strip any leading/trailing whitespace
+            names = [line.strip() for line in file.readlines()]
+        return names
     
 
 if __name__ == "__main__":
-    #检索
-    # 加载预训练权重
-    args = get_args()
-    # 创建模型及特征图
-    models = create_model(args)
-    carla_1_dir_path_img = "./fusion_dataset/carla/image_2/"
-    carla_1_dir_path_gt = "./fusion_dataset/carla/vehicle_256/"
-    kitti_dir_path_img = "./fusion_dataset/kitti/image_2/"
-    kitti_dir_path_gt = "./fusion_dataset/kitti/vehicle_256/"
-    # in-domain and out-domain
-    index = 0
-    Retrieval_merge_neighbor(models, index,'convex',carla_1_dir_path_img, carla_1_dir_path_gt, kitti_dir_path_img, kitti_dir_path_gt, carla_ratio=0.4, carla_num=200, kitti_num=200)
-    index += 200
-    # out-domain
-    Retrieval_merge_neighbor(models, index,'convex', carla_1_dir_path_img, carla_1_dir_path_gt, carla_1_dir_path_img, carla_1_dir_path_gt, carla_ratio=0.4, carla_num=200, kitti_num=200)
-    index += 200
-    # in-domain
-    Retrieval_merge_neighbor(models, index,'convex',kitti_dir_path_img, kitti_dir_path_gt, kitti_dir_path_img, kitti_dir_path_gt, carla_ratio=0.4, carla_num=200, kitti_num=200)
-
+    ralad = RALAD()
+    ralad.run()
     # # 微调
     # start_time = time.ctime()
     # print(start_time)
