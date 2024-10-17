@@ -38,7 +38,7 @@ The following table provides links to the [pre-trained models](https://drive.goo
 | Dataset            | Segmentation Objects | mIOU(%) | mAP(%)| Pretrained Model                                                                                                       | 
 | :--------:           | :-----:     | :----:   | :----: | :----:                                                                                                                 |
 | KITTI 3D Object     | Vehicle    |  39.44  | 58.89 | [link](https://drive.google.com/drive/folders/1XipKf-fLdpikyuQrSjWVrI_TIiZFy7HO?usp=sharing&fileGuid=3X8QJDGGJPXyQgW9) |
-| KITTI 3D Object (RALAD)     | Vehicle    |  39.07  | 57.64 | [link](https://drive.google.com/drive/folders/1PjSFmhsXkmwXmFhvWXZLsBSPCcIzzVny?dmr=1&ec=wgc-drive-hero-goto)  |
+| KITTI 3D Object (RALAD)     | Vehicle    |  41.26 | 58.74 | [link](https://drive.google.com/drive/folders/1PjSFmhsXkmwXmFhvWXZLsBSPCcIzzVny?dmr=1&ec=wgc-drive-hero-goto)  |
 
 ## Results
 ![视频](./images/1.gif)
